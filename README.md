@@ -334,3 +334,210 @@ reading operation, each of them accordingly have its own copy of data in its own
 if there is opportunity read data not copying them to virtual memory of process? 
 
 <img width="320" src="./plots/Reading_redundancy.png">
+
+Yes, that is **memory mapped file** implemented over _syscall_ `mmap`. 
+`mmap` can to tie up region in memory with file and work with that region using `ByteBuffer` without copying
+data to virtual memory of process.
+
+<img width="320" src="./plots/mmap.png">
+
+`mmap` might be extremely powerful tool in perspective of to work with memory region directly over byte buffer, but also
+have some cons you have to know about:
+- no IO exception - it is hard to track down file have been deleted since you work with memory region at this moment
+- `mmap` have limits - you can't map more than 2GB file
+- there is limit either to have number of mapped files per process. It is configured as `max_map_count` in
+`etc/sysctl.conf`
+
+Let's look on `mmap` basic example:
+```java
+try(FileChannel ch = FileChannel.open(Paths.get(baseTestPath + fileName), READ, WRITE)){
+    MappedByteBuffer mmap = ch.map(FileChannel.MapMode.READ_WRITE, 0, ch.size());
+    // load data in memory
+    mmap.load();
+    // make some operations with memory using buffer same way as we do with file
+
+    // flash data to file back
+    mmap.force();
+}
+```
+
+there is how `mmap` going to work over multiple processes:
+
+<img width="320" src="./plots/mmap_mulitple_processes.png">
+
+`mmap` syscall have different work modes (they called flag arguments):
+https://man7.org/linux/man-pages/man2/mmap.2.html
+
+```text
+MAP_SHARED
+        Share this mapping.  Updates to the mapping are visible to
+        other processes mapping the same region, and (in the case
+        of file-backed mappings) are carried through to the
+        underlying file.  (To precisely control when updates are
+        carried through to the underlying file requires the use of
+        msync(2).)
+
+ MAP_SHARED_VALIDATE (since Linux 4.15)
+        This flag provides the same behavior as MAP_SHARED except
+        that MAP_SHARED mappings ignore unknown flags in flags.
+        By contrast, when creating a mapping using
+        MAP_SHARED_VALIDATE, the kernel verifies all passed flags
+        are known and fails the mapping with the error EOPNOTSUPP
+        for unknown flags.  This mapping type is also required to
+        be able to use some mapping flags (e.g., MAP_SYNC).
+
+ MAP_PRIVATE
+        Create a private copy-on-write mapping.  Updates to the
+        mapping are not visible to other processes mapping the
+        same file, and are not carried through to the underlying
+        file.  It is unspecified whether changes made to the file
+        after the mmap() call are visible in the mapped region.
+```
+
+For example `MAP_SHARED` allows to see all modifications of one process to all others and as outcome
+we can build outer-process communication using that feature.
+
+### O_DIRECT
+
+In some use cases we do not need to have page cache at all. We want to have full control of data which we read or write.
+The directive `O_DIRECT` applied to `syscall` `open`.
+
+<img width="320" src="./plots/O_DIRECT.png">
+
+Why would we use that directive at all assuming page cache is great tool to improve latency of yours file IO calls?
+If you are using your own page cache model (by example for database) you do not need to either have one more default from linux.
+
+O_DIRECT having the following limits:
+- You are able to read/write only by aligned blocks (not shifting)
+- Since page cache is disabled, read ahead option won't work either
+
+If you're using JDK 17, that feature have been implemented there - 
+https://github.com/openjdk/jdk/commit/ec1c3bce45261576d64685a9f9f8eff163ea9452
+
+```java
+import com.sun.nio.file.ExtendedOpenOption;
+
+import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
+
+FileChannel fc = FileChannel.open(f.toPath(), StandardOpenOption.WRITE, ExtendedOpenOption.DIRECT);
+```
+
+For JDK less than 17 there is library https://github.com/smacke/jaydio/tree/master. For JDK 8 and 11, 
+there is old but good library built by Stephen Macke - https://github.com/smacke/jaydio.
+Basic example how to use `jaydio` can be found in `src/test/odirect` folder.
+
+Outcome:
+- beneficial use `mmap` to avoid copying data into virtual memory
+- `mmap` have limits you have to keep in mind - lazy loading to page cache, limit of files per process, no IOException
+- `O_DIRECT` can disable page cache for your file.
+- `O_DIRECT` either have limits - you can read/write only aligned blocks, `readahead` won't work
+
+### Direct buffers
+As been said before, when `FileChannel` reads or writes files, it uses `syscalls`.
+When file channel reads data it calls native call, which reads data by **some address** to virtual memory of our process.
+
+Source code of JDK with details:
+https://github.com/frohoff/jdk8u-jdk/blob/master/src/share/classes/sun/nio/ch/IOUtil.java#L37
+
+Since JVM is working with head buffer, how could it get that address?
+
+<img width="320" src="./plots/Direct_Buffer.png">
+
+Obvious solution JDK developers is to create direct buffer, which allocated out of heap. 
+Since you create direct buffer with reference on it, you can read data into it and then copy
+that data from direct buffer into heap buffer.
+Looks like good solution, but as you may notice, we got additional copying of data as outcome of that operation.
+
+_Note_: since to allocate / deallocate direct buffer(s) is expensive operation, file channel implementation have
+special buffer cache to re-use already allocated direct buffers.
+
+Let's look on the internal implementation of read from file channel:
+```java
+static int read(FileDescriptor fd, ByteBuffer dst, long position,
+                    NativeDispatcher nd)
+        throws IOException
+{
+    if (dst.isReadOnly())
+        throw new IllegalArgumentException("Read-only buffer");
+    if (dst instanceof DirectBuffer)
+        return readIntoNativeBuffer(fd, dst, position, nd);
+
+    // Substitute a native buffer
+    ByteBuffer bb = Util.getTemporaryDirectBuffer(dst.remaining());
+    try {
+        int n = readIntoNativeBuffer(fd, bb, position, nd);
+        bb.flip();
+        if (n > 0)
+            dst.put(bb);
+        return n;
+    } finally {
+        Util.offerFirstTemporaryDirectBuffer(bb);
+    }
+}
+```
+As you may see method tries to identify if destination buffer is already direct buffer and if so
+it does not create and temporary buffer and not copying over data to heap buffer before to return it.
+
+How that additional copying may impact your throughput:
+
+Benchmark:
+
+|        | 1MB    | 8Mb  | 16MB   | 64MB | 512MB | 1GB  |
+|--------|--------|------|--------|------|-------|------|
+| heap   | 2708   | 3000 | 3125   | 3125 | 3125  | 4042 |
+| direct | 3125   | 3417 | 3541   | 3542 | 3542  | 4250 |
+| %      | 14.36% | 9.5% | 11.75% | 12%  | 12%   | 5%   |
+
+**Plot**:
+
+Ok we got direct buffer can provide us much better throughput because it avoids additional copying during IO operations:
+
+```java
+import java.nio.ByteBuffer;
+
+ByteBuffer buf = ByteBuffer.allocateDirect(...);
+```
+
+But obviously there is price we have to pay for it:
+
+- Since direct buffer is off-heap buffer, you can't release buffer memory by `buf.clear()`
+- Memory will be release only after GC iteration, as soon as GC will remove `buf` object from generation
+
+**BufferCache**
+Keep in mind `BufferCache` is **thread-local** object
+```java
+// Per-thread cache of temporary direct buffers
+private static ThreadLocal<BufferCache> bufferCache =
+    new ThreadLocal<BufferCache>()
+{
+    @Override
+    protected BufferCache initialValue() {
+        return new BufferCache();
+    }
+};
+```
+what means if you operate buffers in separate threads, cache is going have high memory consumption!
+
+Buffer cache have limited pool size:
+```java
+// The number of temp buffers in our pool
+    private static final int TEMP_BUF_POOL_SIZE = IOUtil.IOV_MAX;
+```
+(defined by `jdk.nio.maxCachedBufferSize`, you can change that value - by default it 1024 for JDK 8).
+
+Keep in mind every buffer with bigger size will be allocated in this pool!
+
+### Effective data copy (`transferTo`)
+
+What if we need to copy one file (or part of file) to another file?
+
+We can just use naive copy approach:
+
+<img width="320" src="./plots/Naive_copy.png">
+
+To reduce numbers of copying data we can use `syscall` again (it called `sendfile`)
+to directly copy data from one place by another by Kernel.
+This method have been implemented in NIO and called `transferTo`
+
+<img width="320" src="./plots/TransferTo_Method.png">
