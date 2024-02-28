@@ -1,29 +1,47 @@
-The article present a comprehensive foundational framework to effectively manage
-file input / output (further just IO) using Java NIO.
+The article presents a comprehensive foundational framework for effectively managing file input/output 
+(referred to as IO hereafter) utilizing Java NIO (New Input/Output).
 
-- All example built on Java 1.8 (AdoptOpenJDK 8)
-- OS and Kernel acronyms applied to linux only (and tested with Ubuntu)
-- All benchmark graphs built with using [jfreechart](https://www.jfree.org/jfreechart/)
+Preliminary Notes:
+
+- All examples are built using Java 1.8 (AdoptOpenJDK 8).
+- Acronyms for operating system (OS) and kernel references are specific to Linux and have been tested on Ubuntu.
+- All benchmark graphs have been generated using [JFreeChart](https://www.jfree.org/jfreechart/).
 
 Contents:
-1. Load type
-2. Disk types
-3. OS optimizations
-4. Java NIO disk API
+1. [Hardware](#Hardware)
+   1. [Load types](#load-types)
+   2. [Disk types](#disk-types)
+   3. [Outcomes](#)
+2. [Kernel optimizations](#page-cache)
+   1. [Page cache](#page-cache)
+   2. [Read ahead pages](#page-cache-read-ahead)
+   3. [Reading redundancy and mmap](#reading-redundancy)
+   4. [Disable cache with O_DIRECT](#)
+   5. [Outcomes](#)
+3. [Java NIO disk API internals](#)
+   1. [Direct buffers](#)
+   2. [Zero-copy file transfer](#)
+   3. [Outcomes](#)
+4. [Summary](#)
 
-### Load type
-It is important to recognize which load mode is going to be used achieve your goal because
-different types of devices know how to serve different queries with different performance.
+## Hardware
+Hardware stands as the cornerstone in constructing robust, scalable, and high-throughput systems. 
+Understanding your hardware's features empowers you to develop the most effective software tailored to your objectives. 
+In the following sections, I will define some hardware aspects which impact disk IO performance.
 
-Random read is when you start anywhere you like in the file and read as much as you like, 
-jumping back and forth as you like. Sequential read is when you start at the beginning of the 
-file and read as much as you like from there on, but never skip anything or move back.
+### Load types
+It's crucial to identify the intended load mode to achieve your goals, as various types of 
+devices excel at serving different queries with distinct performance characteristics.
 
-Using the seek command to move to a different part of the file means that you are using random read. 
-If you would use sequential read you would have to read all the data in the file up to the point where the 
-relevant data was, which would of course be slow. 
-As you can go directly to the right position in the file means that there is not much overhead, and you can expect good 
-performance.
+Random read entails starting at any point within the file and reading any desired amount of data, 
+allowing for jumping back and forth within the file as needed. 
+Sequential read, on the other hand, involves starting from the beginning of the file and reading 
+continuously from that point onward, without skipping any data or moving backward.
+Utilizing the seek command to navigate to a different section of the file implies employing random read functionality.
+If sequential read were employed, it would necessitate reading all the data in the file up to the point where the 
+relevant data is located. This approach would inherently be slower due to the need to process unnecessary data.
+The ability to directly access the desired position in the file minimizes overhead, resulting in an expectation 
+of good performance.
 
 Scenarios:
 - **Sequential reading**: copy data / backup restoration
@@ -45,9 +63,8 @@ Benchmark:
 
 <img src="./plots/load_type_plot.png">
 
-Note:
-Source code to build benchmark table and plot is located in [java_file_io](http://0.0.0.0).
-To make it working:
+_Note_:
+If you would like to repeat results on your machine (benchmark / plot):
 - run unit tests in `./src/test`. tests will build you *Load type (GB per sec)* output files in
 `./src/main/resources` such as: `seqReading.txt`, `appendOnlyWrite.txt`, `randomRead.txt`, `randomWrite.txt`.
 - run `./src/main/org/example/LoadType.class/main`. That should show you plot based on your data,
@@ -67,10 +84,11 @@ then if you see &check;
 | Random read        | &cross; | &check; | &check;   |
 | Random write       | &cross; | &cross; | &check; * |
 
-All devices in the modern world have block architecture. As outcome of that that means all modern
-disk devices operate data by **page** - unit of reading/writing into device (4/8/16 Kb).
+All disk devices operate on a block architecture, which means that modern disk devices 
+handle data in units known as pages. These pages represent the fundamental units for 
+reading and writing data into the device, typically ranging in size from 4 to 16 kilobytes.
 
-As outcome:
+Brief summary on disk types:
 - HDD have one mechanical moving part (head) to switch/move between platters what makes random operations 
 (seek and read/write after) much slower than sequential operations.
 - SSD disks do not have any moving parts by design, as outcome that type of disk have 
@@ -81,14 +99,33 @@ to make random read fast in addition to sequential IO.
 and flushes it to flash media at opportune times. Write latency is thus the cache access latency typically have microseconds order.
 Since typical MVRAM size is about a hundred kilobytes (~144Kb) NVE write for any data which can fit would be very fast.
 
-### NAND flash
-Most of modern SSD disks is built by NAND flash design:
+Here's a brief summary of disk types:
+
+- **HDD** (Hard Disk Drive): HDDs contain a single mechanical moving part, the head, 
+which is responsible for switching/moving between platters. This mechanical operation 
+makes random operations (such as seeking and read/write) considerably slower compared 
+to sequential operations.
+- **SSD** (Solid State Drive): SSDs are designed without any moving parts. They feature 
+internal parallel access to different parts of the flash drive memory due to multiple data buses. 
+This parallel access enables SSDs to serve parallel requests for data retrieval, 
+making both random reads and sequential IO operations fast.
+- **NVMe** (Non-Volatile Memory Express) SSD: NVMe SSDs, in addition to the basic features of SSDs, 
+incorporate a controller that caches writes in onboard NVRAM (Non-Volatile Random Access Memory). 
+These writes are then flushed to the flash media at opportune times. 
+The latency for write operations is typically on the order of microseconds, 
+as access to the cache is swift. Given that the typical size of NVRAM is around a 
+hundred kilobytes (~144KB), NVMe writes for data that can fit within this cache size 
+are exceptionally fast.
+
+The majority of modern SSD disks are constructed using **NAND** flash memory technology:
+
+----
 
 <img width="640" src="./plots/NAND_flash_design.png">
 
-Simply that just means:
-- disk have minimal unit of data storing - **Page** (4k/8K/16K)
-- Number of pages consists **Block** (128/256 pages)
+Simply put, this means that a disk has a minimal unit of data storage known as a page 
+(typically 4KB, 8KB, or 16KB in size), and a certain number of these pages form a block 
+(usually comprising 128 or 256 pages).
 
 ### NAND flash write
 Let's consider the typical schema of writing data to SSD by NAND.
@@ -111,7 +148,7 @@ amplification).
 - Writing is possible only to a **new pages**. That means we need to have any
 mechanism to collect garbage from device or memory will exceed pretty soon.
 
-### NAND flash cleanup
+#### NAND flash cleanup
 NAND by design can operate by blocks only, it does not perform any operations on the page level.
 Controller makes constant observation of disk space, and then it identifies by threshold there about
 N percents have been used, it starts operation of internal garbage collection.
@@ -259,7 +296,7 @@ To make it working:
 - run `./src/main/org/example/PageClass.class/main`. That should show you plot based on your data,
   generate by (1)
 
-*** Page Cache read ahead
+### Page Cache read ahead
 Sequential reading is very common pattern in many application workflows. So any modern OS
 (linux in particular) have read-ahead mechanism to improve latency accordingly in this case.
 Kernel can identify if user reads data sequentially and pull part of data to page cache in ahead to 
