@@ -22,7 +22,7 @@ Contents:
    1. [Direct buffers](#)
    2. [Zero-copy file transfer](#)
    3. [Outcomes](#)
-4. [Summary](#)
+4. [Summary](#Summary)
 
 ## Hardware
 Hardware stands as the cornerstone in constructing robust, scalable, and high-throughput systems. 
@@ -119,23 +119,23 @@ are exceptionally fast.
 
 The majority of modern SSD disks are constructed using **NAND** flash memory technology:
 
-----
-
-<img width="640" src="./plots/NAND_flash_design.png">
+<img width="640" src="plots/NAND_flash_design.png">
 
 Simply put, this means that a disk has a minimal unit of data storage known as a page 
 (typically 4KB, 8KB, or 16KB in size), and a certain number of these pages form a block 
 (usually comprising 128 or 256 pages).
 
-### NAND flash write
-Let's consider the typical schema of writing data to SSD by NAND.
-For example user makes write of long datatype value with some shift to SSD disk.
-When request coming to the disk:
-- controller finds for the **page** with that part of file user wants to update
-- controller reads data to it's internal buffer 
-- rewrites (updates) your long datatype value in the internal buffer
-- writes to the **new** page. it does not re-write current page, instead of that
-new page is going to be created for your "updated" value inside of **block**
+**NAND flash write**
+
+Let's break down the typical schema of writing data to an SSD by NAND when a user 
+writes a long datatype value with some shift. When request comes to the disk:
+- _Page Location_: The controller locates the **page** within the NAND flash memory that corresponds to the part of the file the user wants to update.
+- _Data Retrieval_: The controller reads the data from the located page into its internal buffer.
+- _Data Update_: The long datatype value is updated within the internal buffer.
+- _New Page Creation_: Instead of directly overwriting the current page, the controller creates a new page within the same block to accommodate the updated data.
+- _Write Operation_: The updated data in the internal buffer is written to the new page within the **block**.
+
+----
 
 <img width="320" height="240" src="./plots/NAND_flash_write.png">
 
@@ -578,3 +578,27 @@ to directly copy data from one place by another by Kernel.
 This method have been implemented in NIO and called `transferTo`
 
 <img width="320" src="./plots/TransferTo_Method.png">
+
+Benchmark:
+
+|            | 1MB    | 8Mb  | 16MB   | 64MB | 512MB | 1GB  |
+|------------|--------|------|--------|------|-------|------|
+| transferTo | 2708   | 3000 | 3125   | 3125 | 3125  | 4042 |
+| Naive      | 3125   | 3417 | 3541   | 3542 | 3542  | 4250 |
+| %          | 14.36% | 9.5% | 11.75% | 12%  | 12%   | 5%   |
+
+Plot:
+
+Outcome:
+
+- use direct buffer if low latency is important 
+- if you assume to use and interrupt threads with FileChannel, use `AsyncFileChannel`
+or `RWLock` for `FileChannel`
+
+## Summary
+
+- Know your hardware and load type to choose effective strategy for disk IO operations
+- Operating system tries to improve your throughput using page cache and read ahead.
+If you define load type strategy, you can help OS using `fadvice`.
+- Use `FileChannel` - File(I/O)Stream and RandomAccessFile classes mostly legacy today
+- Watch for IO limits - `mmap` limit, open files limit, etc
