@@ -135,23 +135,26 @@ writes a long datatype value with some shift. When request comes to the disk:
 - _New Page Creation_: Instead of directly overwriting the current page, the controller creates a new page within the same block to accommodate the updated data.
 - _Write Operation_: The updated data in the internal buffer is written to the new page within the **block**.
 
-----
-
 <img width="320" height="240" src="./plots/NAND_flash_write.png">
 
-As outcome:
-- Write operation will make a new page. It does not matter how many bytes you write -
-even change of 1 byte will rewrite page
-- **Write amplification** - that is terms which define how many effort we need to write
-data. If data less then page size that means data not been written effectively (poor / bad write
-amplification).
-- Writing is possible only to a **new pages**. That means we need to have any
-mechanism to collect garbage from device or memory will exceed pretty soon.
+_Summary_:
+- **Write Operation**: Each write operation results in the creation of a new page. 
+It doesn't matter how many bytes are written; even changing a single byte will trigger 
+the rewriting of the entire page.
+- **Write Amplification**: This term refers to the level of effort required to write data. 
+If the amount of data written is less than the page size, it indicates poor or inefficient write amplification.
+- **Garbage Collection**: Writing is only possible to new pages, meaning that a mechanism is necessary 
+to collect garbage from the device, or the memory will quickly become filled with partially filled pages, 
+leading to inefficient use of storage space. Garbage collection routines are essential to reclaim 
+space from partially filled pages and maintain optimal storage efficiency.
 
-#### NAND flash cleanup
+**NAND flash cleanup**
+
 NAND by design can operate by blocks only, it does not perform any operations on the page level.
 Controller makes constant observation of disk space, and then it identifies by threshold there about
 N percents have been used, it starts operation of internal garbage collection.
+
+----
 
 <img width="320" src="./plots/NAND_flash_erase_1.png">
 
@@ -565,7 +568,7 @@ Buffer cache have limited pool size:
 
 Keep in mind every buffer with bigger size will be allocated in this pool!
 
-### Effective data copy (`transferTo`)
+### Zero-copy file transfer (`transferTo`)
 
 What if we need to copy one file (or part of file) to another file?
 
@@ -602,3 +605,5 @@ or `RWLock` for `FileChannel`
 If you define load type strategy, you can help OS using `fadvice`.
 - Use `FileChannel` - File(I/O)Stream and RandomAccessFile classes mostly legacy today
 - Watch for IO limits - `mmap` limit, open files limit, etc
+
+## References
