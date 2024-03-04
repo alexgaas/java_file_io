@@ -65,7 +65,7 @@ Benchmark:
 
 _Note_:
 If you would like to repeat results on your machine (benchmark / plot):
-- run unit tests in `./src/test`. tests will build you *Load type (GB per sec)* output files in
+- run unit tests in `./src/test/loadtype`. tests will build you *Load type (GB per sec)* output files in
 `./src/main/resources` such as: `seqReading.txt`, `appendOnlyWrite.txt`, `randomRead.txt`, `randomWrite.txt`.
 - run `./src/main/org/example/LoadType.class/main`. That should show you plot based on your data,
 generate by (1)
@@ -154,38 +154,49 @@ NAND by design can operate by blocks only, it does not perform any operations on
 Controller makes constant observation of disk space, and then it identifies by threshold there about
 N percents have been used, it starts operation of internal garbage collection.
 
-----
-
 <img width="320" src="./plots/NAND_flash_erase_1.png">
 
-Using its own internal indexes to identify fresh pages, it takes last snapshot of pages 
-over "old" block and copies all pages to available fresh block.
+The SSD controller utilizes its internal indexes to identify fresh pages for garbage collection. 
+When triggered, it takes a snapshot of the current pages within the "old" block and proceeds to copy all 
+valid pages to an available fresh block.
 
 <img width="320" src="./plots/NAND_flash_erase_2.png">
 
-After that controller cleans up whole old block. Whole procedure of moving data and clean up blocks as been
-said before called internal GC. Please be aware of during the process of your internal GC, your whole IO latency might 
-degrade.
+After this process, the controller proceeds to clean up the entire old block. This entire procedure, 
+involving the movement of data and the cleanup of blocks, is referred to as internal garbage collection (GC). 
+It's important to note that during the internal GC process, the overall IO latency might degrade.
 
 <img width="320" src="./plots/NAND_flash_erase_3.png">
 
-Outcome:
-- **Disk operates by pages**. Write data as multiple of page size to have best write amplification and best throughput.
-If you have less data than at least one page, buffer data in the RAM till you get size of page (or even better multiple of page size).
-- If you write not effectively eg. less than page size, you increase consistent cycle of internal GC and your device
-highly likely will have shorter lifetime.
+Summary:
+- Disk Operation: Disks operate by pages. To achieve optimal write amplification and throughput, 
+it's best to write data in multiples of the page size. If the data to be written is less than a full page, 
+buffering it in RAM until it reaches the size of at least one page (or even better, multiples of the page size) 
+is advisable.
+- Write Efficiency: Writing data less effectively, such as with amounts smaller than a page size, increases 
+the frequency of internal garbage collection cycles. This can lead to a shorter lifespan for the device due 
+to increased wear and tear. Therefore, maximizing write efficiency is essential for prolonging the longevity 
+of the SSD.
 
-### Kernel - writing and reading
+## Kernel
 Any JVM based application starts as a process in User Space of operating system. When application have to perform any
 IO operation it makes `syscall` what means makes kernel call to make IO operations over device driver which kernel have.
 
+Any JVM-based application initiates as a process within the user space of the operating system. 
+When such an application needs to perform any IO operation, it triggers a `syscall`, signaling the operating 
+system kernel to facilitate the IO operations via the appropriate device driver it possesses. 
+This interaction between the application in user space and the kernel for IO operations ensures efficient 
+data handling and resource management.
+
 <img width="320" src="./plots/OS_syscall.png">
 
-_Note_: JVM JDK (at least in versions 8) does not have any non-blocking call mechanism to perform IO operations because 
-UNIX does not support non-blocking I/O for files. As Java should (at least try to) provide the same behaviour on all 
-platforms, the `FileChannel` does not implement `SelectableChannel` (https://www.remlab.net/op/nonblock.shtml).
-However, Java 7 will include a `AsynchronousFileChannel` class that supports asynchronous 
-file I/O, which is a different mechanism to non-blocking I/O.
+_Note_: As of JDK versions up to 8, the JVM does not offer a non-blocking call mechanism for performing IO operations, 
+primarily due to UNIX not supporting non-blocking I/O for files. To maintain platform consistency across 
+different operating systems, the `FileChannel` class does not implement `SelectableChannel`. More details on this 
+limitation can be found at https://www.remlab.net/op/nonblock.shtml.
+However, Java 7 introduced the `AsynchronousFileChannel` class, which supports asynchronous file I/O. 
+This mechanism differs from non-blocking I/O but provides similar functionality in handling IO operations in a more 
+efficient and responsive manner:
 https://docs.oracle.com/javase/7/docs/api/java/nio/channels/AsynchronousFileChannel.html
 ```text
 An AsynchronousFileChannel is associated with a thread pool to which tasks are submitted to handle I/O events and dispatch 
@@ -193,36 +204,49 @@ to completion handlers that consume the results of I/O operations on the channel
 The completion handler for an I/O operation initiated on a channel is guaranteed to be invoked by one of the threads 
 in the thread pool. 
 ```
-In general only sockets and pipes truly support non-blocking I/O via `select()`, `epull()` or `io_ring()` mechanisms.
+In general, only sockets and pipes fully support non-blocking I/O through mechanisms such as `select()`, 
+`epoll()`, or `io_uring()`. These mechanisms allow for efficient handling of I/O operations without 
+blocking the execution of the program, enabling asynchronous and event-driven programming paradigms.
 
-Outcome:
-- Any IO operation is blocking. If you do not want your thread to wait 
-- `Syscall` from user space makes context switching what usually takes about 10k clock cycles.
-- As result of (1) and (2), if we expect "hot path" during performing IO operations run IO in separate thread
-or thread pool (or use `AsynchronousFileChannel` which uses thread pool under the hood).
+Summary:
+- All IO operations are inherently blocking, meaning they can potentially cause threads to wait.
+- When a `syscall` is made from user space, it triggers context switching, which typically takes 
+around 10k clock cycles. This incurs significant latency.
+- To mitigate the blocking nature of IO and reduce latency, consider running IO operations in a 
+separate thread or thread pool. Alternatively, you can utilize AsynchronousFileChannel, which 
+internally employs a thread pool to handle IO operations asynchronously. 
+This approach helps ensure that IO operations do not disrupt the execution of critical tasks 
+in the application's main thread.
 
 ### Page cache
-Disk is extremely slow resource in according to processor cache or even memory.
-https://gist.github.com/jboner/2841832
+Compared to processor cache or main memory, disk access is significantly slower (https://gist.github.com/jboner/2841832). 
+This is primarily due to the mechanical nature of traditional hard disk drives (HDDs) and the slower access times of NAND 
+flash memory used in solid-state drives (SSDs) compared to volatile memory technologies like RAM. 
+As a result, accessing data from disk can introduce considerable latency, making it one of the slowest 
+resources in the computing system.
 
-To speed up access to any information on the disk developers made a **cache** in memory. OS also have its own
-cache called Page Cache. For that OS allocates specific region operated by **kernel** wherein have to be stored
-most frequent data requested from files.
-In user perspective he requests some data from disk:
-- Application process requests data from disk over kernel `syscall`
-- Kernel first checking if that data have been written to page cache first
-- If data exist in cache, return that data
-- If data do not exist in cache, load that data from device
+To enhance access speed to information stored on disk, developers implemented a cache in memory. 
+Additionally, the operating system employs its own cache known as the **Page Cache**. The OS allocates a 
+specific region managed by the kernel, where frequently requested data from files is stored. 
+This caching mechanism aims to reduce disk access latency by keeping frequently accessed data readily 
+available in memory, improving overall system performance.
 
-<img width="320" src="./plots/OS_Page_Cache.png">
+From the user's perspective when requesting data from disk:
+- The application process initiates a request for data from the disk through a kernel `syscall`.
+- The kernel first checks if the requested data is already present in the page cache.
+- If the data exists in the cache, the kernel promptly returns the cached data to the application, avoiding the need to access the disk.
+- If the data is not found in the cache, the kernel proceeds to load the data from the disk device into the cache before returning it to the application.
 
-You have to keep in mind here since kernel completely manages page cache (load / evict page), every
-page can be evicted at the discretion of kernel.
+This caching mechanism helps improve overall system performance by reducing the need for frequent disk accesses, as data that has been recently accessed is stored in memory for faster retrieval.
+
+<img src="./plots/OS_Page_Cache.png">
+
+The kernel has full control over the page cache, including the decision to load or evict pages. 
+This means that any page stored in the cache can be evicted by the kernel based on its internal management policies and resource availability. 
 
 ### Page Cache load flow
 
-Let's make simple code to read data aligned to page size using `FileChannel`:
-
+Let's make a simple code to read data aligned by page size using `FileChannel`:
 ```java
 ByteBuffer buf = ByteBuffer.allocate(...);
 try(FileChannel ch = FileChannel.open(Path.of("YOUR_FILE_PATH"), READ)){
@@ -240,15 +264,16 @@ try(FileChannel ch = FileChannel.open(Path.of("YOUR_FILE_PATH"), READ)){
 }
 ```
 
-<img width="320" src="./plots/OS_Page_Cache_Flow_Aligned.png">
+<img src="./plots/OS_Page_Cache_Flow_Aligned.png">
 
-- start with `ch.read(buf, 0)`
-- Page Cache -> Get Page
-- if found in page cache then fill buffer in virtual memory of process (no disk IO)
-- if not found: read page from disk to page cache -> load page from page cache and fill buffer in virtual memory of process.
-Disk IO equals 1 page plus CPU for page cache load/evict LRU page
+Lets go over the steps from picture above:
+- start reading with `ch.read(buf, 0)` (see code example)
+- `Page Cache` -> `Get Page` (page cache tries to get cached page)
+- if _found_ in page cache then fill buffer in virtual memory of process (_no disk IO_)
+- if _not found_: read page from disk to page cache -> load page from page cache and fill buffer in virtual memory of process.
+_Disk IO equals 1 page plus CPU for page cache load/evict LRU page_.
 
-Now let's make not aligned reading. That might look like:
+Now let's make not aligned by page reading:
 ```java
 ByteBuffer buf = ByteBuffer.allocate(...);
 try(FileChannel ch = FileChannel.open(Path.of("YOUR_FILE_PATH"), READ)){
@@ -266,16 +291,19 @@ try(FileChannel ch = FileChannel.open(Path.of("YOUR_FILE_PATH"), READ)){
 }
 ```
 
-<img width="320" src="./plots/OS_Page_Cache_Flow_Aligned.png">
+<img src="./plots/OS_Page_Cache_Flow_Not_Aligned.png">
 
-- start with `ch.read(buf, 6144)`
-- Page Cache gets 2 pages
-- if found in page cache then fill buffer in virtual memory of process (no disk IO)
-- if not found: read 2 pages from disk to page cache -> load page from page cache and fill buffer in virtual memory of process.
-  Disk IO equals 2 pages plus CPU for page cache load/evict LRU page
+- start reading with `ch.read(buf, 6144)` (see code example)
+- `Page Cache` tries to get 2 pages
+- if _found_ in page cache then fill buffer in virtual memory of process (_no disk IO_)
+- if _not found_: read 2 pages from disk to page cache -> load page from page cache and fill buffer in virtual memory of process.
+  _Disk IO equals 2 pages plus CPU for page cache load/evict LRU page_.
 
-As you may see we spend more resources to read same data volume if we do not align read/write with page size.
-Just notice, that only have been achieved by changing buffer shift (not buffer size itself).
+Aligning read and write operations with the page size can significantly impact resource utilization when accessing the 
+same volume of data. This improvement is achieved solely by adjusting the buffer shift rather than changing the buffer size itself. 
+This optimization ensures that data is read and written in aligned blocks, maximizing efficiency and minimizing overhead. 
+By aligning with the page size, unnecessary data movements and additional IO operations are avoided, leading to better performance 
+and resource utilization.
 
 Now let's see by benchmark how aligned / not-aligned reading impact latency by percentiles:
 
@@ -291,22 +319,26 @@ Benchmark:
 
 <img src="./plots/OS_Page_Cache_plot.png">
 
-Note:
-Source code to build benchmark table and plot is located in [java_file_io](http://0.0.0.0).
-To make it working:
+_Note_:
+If you would like to repeat results on your machine (benchmark / plot):
 - run unit tests in `./src/test/pagecache`. tests will build you *percentile* output files in
   `./src/main/resources` such as: `alignedLatencyPercentile.txt`, `notAlignedLatencyPercentile.txt`.
 - run `./src/main/org/example/PageClass.class/main`. That should show you plot based on your data,
   generate by (1)
 
-### Page Cache read ahead
-Sequential reading is very common pattern in many application workflows. So any modern OS
-(linux in particular) have read-ahead mechanism to improve latency accordingly in this case.
-Kernel can identify if user reads data sequentially and pull part of data to page cache in ahead to 
-prevent expensive loading from disk. This incredible feature can significantly improve sequential reading except
-the case it is not all time expected behavior (in context of other load types).
-To manage that behavior of kernel, there is `syscall` - `fadvice` ([fadvice docs](https://pubs.opengroup.org/onlinepubs/9699919799/functions/posix_fadvise.html#:~:text=The%20posix_fadvise()%20function%20shall,currently%20exist%20in%20the%20file)).
+----
 
+### Page Cache read ahead
+Sequential reading is a common pattern in many application workflows, and modern operating systems, including Linux, 
+incorporate a read-ahead mechanism to enhance latency in such scenarios. The kernel can detect when data is being read 
+sequentially and proactively prefetch portions of the data into the page cache, anticipating future requests. 
+This feature is invaluable as it prevents the need for expensive loading from disk, significantly improving the 
+efficiency of sequential reading operations.
+However, it's important to note that while read-ahead can greatly benefit sequential reading, it may not always 
+align with the expected behavior in the context of other load types or access patterns. In scenarios where the workload 
+consists of mixed access patterns or requires real-time responsiveness, the benefits of read-ahead may need 
+to be balanced against other considerations to ensure optimal system performance.
+To manage that behavior of kernel, there is `syscall` - `fadvice` ([fadvice docs](https://pubs.opengroup.org/onlinepubs/9699919799/functions/posix_fadvise.html#:~:text=The%20posix_fadvise()%20function%20shall,currently%20exist%20in%20the%20file)):
 ```text
 FADV_NORMAL
     No special treatment.
@@ -344,17 +376,12 @@ try(FileChannel ch = FileChannel.open(Paths.get(baseTestPath + fileName), READ))
     throw new RuntimeException(e);
 }
 ```
-Full example in `java_file_io/src/test/java/pagecache/PageCacheReadAheadTest`
+Full example could be found in the `java_file_io/src/test/java/pagecache/PageCacheReadAheadTest`
+
+----
 
 <img width="320" src="./plots/OS_Page_Cache_Read_Ahead.png">
 
-Applying page cache read ahead directives best on your load type pattern can significantly improve your latency.
-
-<!--
-Benchmark:
-
-In progress...
--->
 
 ### Outcome of page cache
 
