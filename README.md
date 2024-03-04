@@ -239,7 +239,7 @@ From the user's perspective when requesting data from disk:
 
 This caching mechanism helps improve overall system performance by reducing the need for frequent disk accesses, as data that has been recently accessed is stored in memory for faster retrieval.
 
-<img src="./plots/OS_Page_Cache.png">
+<img width="320" src="./plots/OS_Page_Cache.png">
 
 The kernel has full control over the page cache, including the decision to load or evict pages. 
 This means that any page stored in the cache can be evicted by the kernel based on its internal management policies and resource availability. 
@@ -326,8 +326,6 @@ If you would like to repeat results on your machine (benchmark / plot):
 - run `./src/main/org/example/PageClass.class/main`. That should show you plot based on your data,
   generate by (1)
 
-----
-
 ### Page Cache read ahead
 Sequential reading is a common pattern in many application workflows, and modern operating systems, including Linux, 
 incorporate a read-ahead mechanism to enhance latency in such scenarios. The kernel can detect when data is being read 
@@ -378,20 +376,18 @@ try(FileChannel ch = FileChannel.open(Paths.get(baseTestPath + fileName), READ))
 ```
 Full example could be found in the `java_file_io/src/test/java/pagecache/PageCacheReadAheadTest`
 
+<img src="./plots/OS_Page_Cache_Read_Ahead.png">
+
+**Summary**:
+- Align read and write operations with the page size to optimize resource utilization.
+- Write data in chunks that are aligned with the page size to maximize efficiency.
+- The page cache is a memory region managed by the kernel, caching data from disk for faster reading and buffering 
+data for more effective writing.
+- Read-ahead is a page cache strategy employed by the kernel to prefetch data ahead of requested data, particularly 
+effective for sequential reading tasks such as reading data from files or media files. 
+For scenarios requiring random access, consider using the `fadvise` _syscall_ to enhance latency.
+
 ----
-
-<img width="320" src="./plots/OS_Page_Cache_Read_Ahead.png">
-
-
-### Outcome of page cache
-
-- Read/write with chunks aligned by page size
-- Write chunks by page size
-- Page cache is memory region managed by Kernel which caching data from disk for faster reading and buffering data for 
-more effective writing
-- Read ahead - page cache strategy to make decision and read data ahead of requested data. Highly effective for sequential
-reading such as read data from file on start or media file. If you need random access instead use `fadvice` syscall to improve
-your latency.
 
 ### Reading redundancy
 
