@@ -336,21 +336,7 @@ However, it's important to note that while read-ahead can greatly benefit sequen
 align with the expected behavior in the context of other load types or access patterns. In scenarios where the workload 
 consists of mixed access patterns or requires real-time responsiveness, the benefits of read-ahead may need 
 to be balanced against other considerations to ensure optimal system performance.
-To manage that behavior of kernel, there is `syscall` - `fadvice` ([fadvice docs](https://pubs.opengroup.org/onlinepubs/9699919799/functions/posix_fadvise.html#:~:text=The%20posix_fadvise()%20function%20shall,currently%20exist%20in%20the%20file)):
-```text
-FADV_NORMAL
-    No special treatment.
-FADV_RANDOM
-    Expect page references in random order.
-FADV_SEQUENTIAL
-    Expect page references in sequential order.
-FADV_WILLNEED
-    Expect access in the near future.
-FADV_DONTNEED
-    Do not expect access in the near future. Subsequent access of pages in this range will succeed, but will result either in reloading of the memory contents from the underlying mapped file or zero-fill-in-demand pages for mappings without an underlying file.
-FADV_NOREUSE
-    Access data only once.
-```
+To manage that behavior of kernel, there is `syscall` - `fadvice` ([fadvice docs](https://pubs.opengroup.org/onlinepubs/9699919799/functions/posix_fadvise.html#:~:text=The%20posix_fadvise()%20function%20shall,currently%20exist%20in%20the%20file)).
 
 JVM example with [nio-one](https://github.com/odnoklassniki/one-nio):
 ```java
@@ -386,6 +372,23 @@ data for more effective writing.
 - Read-ahead is a page cache strategy employed by the kernel to prefetch data ahead of requested data, particularly 
 effective for sequential reading tasks such as reading data from files or media files. 
 For scenarios requiring random access, consider using the `fadvise` _syscall_ to enhance latency.
+
+Now let's see by benchmark how sequential / random read ahead for page cache impacts latency by percents:
+
+Benchmark:
+
+| *Read Ahead (ms)* | 4MB | 64MB | 128MB | 256MB |
+|-------------------|-----|------|-------|-------|
+| Sequential        | 81  | 550  | 1065  | 2158  |
+| Random            | 108 | 547  | 1107  | 2244  |
+| %                 | 25% | 0%   | 4%    | 4%    |
+
+_Note_:
+If you would like to repeat results on your machine (benchmark / plot):
+- run unit tests in `./src/test/pagecache`. tests will build you *percentile* output files in
+  `./src/main/resources` such as: `alignedLatencyPercentile.txt`, `notAlignedLatencyPercentile.txt`.
+- run `./src/main/org/example/PageClass.class/main`. That should show you plot based on your data,
+  generate by (1)
 
 ----
 
