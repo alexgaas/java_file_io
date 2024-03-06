@@ -117,7 +117,7 @@ are exceptionally fast.
 
 The majority of modern SSD disks are constructed using **NAND** flash memory technology:
 
-<img width="640" src="plots/NAND_flash_design.png">
+<img src="plots/NAND_flash_design.png">
 
 Simply put, this means that a disk has a minimal unit of data storage known as a page 
 (typically 4KB, 8KB, or 16KB in size), and a certain number of these pages form a block 
@@ -133,7 +133,7 @@ writes a long datatype value with some shift. When request comes to the disk:
 - _New Page Creation_: Instead of directly overwriting the current page, the controller creates a new page within the same block to accommodate the updated data.
 - _Write Operation_: The updated data in the internal buffer is written to the new page within the **block**.
 
-<img width="320" height="240" src="./plots/NAND_flash_write.png">
+<img src="./plots/NAND_flash_write.png">
 
 _Summary_:
 - **Write Operation**: Each write operation results in the creation of a new page. 
@@ -152,19 +152,19 @@ NAND by design can operate by blocks only, it does not perform any operations on
 Controller makes constant observation of disk space, and then it identifies by threshold there about
 N percents have been used, it starts operation of internal garbage collection.
 
-<img width="320" src="./plots/NAND_flash_erase_1.png">
+<img src="./plots/NAND_flash_erase_1.png">
 
 The SSD controller utilizes its internal indexes to identify fresh pages for garbage collection. 
 When triggered, it takes a snapshot of the current pages within the "old" block and proceeds to copy all 
 valid pages to an available fresh block.
 
-<img width="320" src="./plots/NAND_flash_erase_2.png">
+<img src="./plots/NAND_flash_erase_2.png">
 
 After this process, the controller proceeds to clean up the entire old block. This entire procedure, 
 involving the movement of data and the cleanup of blocks, is referred to as internal garbage collection (GC). 
 It's important to note that during the internal GC process, the overall IO latency might degrade.
 
-<img width="320" src="./plots/NAND_flash_erase_3.png">
+<img src="./plots/NAND_flash_erase_3.png">
 
 Summary:
 - Disk Operation: Disks operate by pages. To achieve optimal write amplification and throughput, 
@@ -187,7 +187,7 @@ system kernel to facilitate the IO operations via the appropriate device driver 
 This interaction between the application in user space and the kernel for IO operations ensures efficient 
 data handling and resource management.
 
-<img width="320" src="./plots/OS_syscall.png">
+<img src="./plots/OS_syscall.png">
 
 _Note_: As of JDK versions up to 8, the JVM does not offer a non-blocking call mechanism for performing IO operations, 
 primarily due to UNIX not supporting non-blocking I/O for files. To maintain platform consistency across 
@@ -239,7 +239,7 @@ From the user's perspective when requesting data from disk:
 
 This caching mechanism helps improve overall system performance by reducing the need for frequent disk accesses, as data that has been recently accessed is stored in memory for faster retrieval.
 
-<img width="320" src="./plots/OS_Page_Cache.png">
+<img src="./plots/OS_Page_Cache.png">
 
 The kernel has full control over the page cache, including the decision to load or evict pages. 
 This means that any page stored in the cache can be evicted by the kernel based on its internal management policies and resource availability. 
@@ -449,21 +449,25 @@ to share data without the need for explicit copying or synchronization mechanism
 region by one process can be immediately observed by other processes, facilitating seamless communication and coordination 
 between different parts of the system.
 
-----
-
 ### Disable cache with O_DIRECT
 
-In some use cases we do not need to have page cache at all. We want to have full control of data which we read or write.
-The directive `O_DIRECT` applied to `syscall` `open`.
+In certain use cases, having full control over data without relying on the page cache can be crucial. 
+This is where the `O_DIRECT` flag comes into play, which can be applied to the `open` _syscall_.
 
-<img width="320" src="./plots/O_DIRECT.png">
+<img src="./plots/O_DIRECT.png">
 
 Why would we use that directive at all assuming page cache is great tool to improve latency of yours file IO calls?
 If you are using your own page cache model (by example for database) you do not need to either have one more default from linux.
 
-O_DIRECT having the following limits:
-- You are able to read/write only by aligned blocks (not shifting)
-- Since page cache is disabled, read ahead option won't work either
+When using `O_DIRECT`, data is read **directly** from the disk to the application's buffer and written directly from the 
+application's buffer to the disk, bypassing the page cache entirely. This provides applications with precise control over 
+data handling and eliminates any potential caching effects.
+
+Some common use cases for using O_DIRECT include:
+- Applications requiring low-latency access to data, where avoiding the overhead of the page cache can improve performance.
+- Real-time applications that need deterministic IO behavior, as `O_DIRECT` ensures that IO operations are not subject 
+to page cache management and associated unpredictability.
+- Applications that need to manage their own caching mechanisms or have specific requirements for data integrity and consistency.
 
 If you're using JDK 17, that feature have been implemented there - 
 https://github.com/openjdk/jdk/commit/ec1c3bce45261576d64685a9f9f8eff163ea9452
@@ -476,6 +480,8 @@ import java.nio.file.StandardOpenOption;
 
 FileChannel fc = FileChannel.open(f.toPath(), StandardOpenOption.WRITE, ExtendedOpenOption.DIRECT);
 ```
+
+----
 
 For JDK less than 17 there is library https://github.com/smacke/jaydio/tree/master. For JDK 8 and 11, 
 there is old but good library built by Stephen Macke - https://github.com/smacke/jaydio.
