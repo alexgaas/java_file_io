@@ -11,18 +11,16 @@ Contents:
 1. [Hardware](#Hardware)
    1. [Load types](#load-types)
    2. [Disk types](#disk-types)
-   3. [Outcomes](#)
-2. [Kernel optimizations](#page-cache)
+2. [Kernel optimizations](#kernel-optimizations)
    1. [Page cache](#page-cache)
-   2. [Read ahead pages](#page-cache-read-ahead)
-   3. [Reading redundancy and mmap](#reading-redundancy)
-   4. [Disable cache with O_DIRECT](#)
-   5. [Outcomes](#)
-3. [Java NIO disk API internals](#)
-   1. [Direct buffers](#)
-   2. [Zero-copy file transfer](#)
-   3. [Outcomes](#)
+   2. [Read ahead pages](#read-ahead-pages)
+   3. [Reading redundancy and mmap](#reading-redundancy-and-mmap)
+   4. [Disable cache with O_DIRECT](#disable-cache-with-o_direct)
+3. [Java NIO disk API internals](#java-nio-disk-api-internals)
+   1. [Direct buffers](#direct-buffers)
+   2. [Zero-copy file transfer](#zero-copy-file-transfer)
 4. [Summary](#Summary)
+5. [References](#references)
 
 ## Hardware
 Hardware stands as the cornerstone in constructing robust, scalable, and high-throughput systems. 
@@ -178,7 +176,7 @@ the frequency of internal garbage collection cycles. This can lead to a shorter 
 to increased wear and tear. Therefore, maximizing write efficiency is essential for prolonging the longevity 
 of the SSD.
 
-## Kernel
+## Kernel optimizations
 
 Any JVM based application starts as a process in User Space of operating system. When application have to perform any
 IO operation it makes `syscall` what means makes kernel call to make IO operations over device driver which kernel have.
@@ -246,7 +244,7 @@ This caching mechanism helps improve overall system performance by reducing the 
 The kernel has full control over the page cache, including the decision to load or evict pages. 
 This means that any page stored in the cache can be evicted by the kernel based on its internal management policies and resource availability. 
 
-### Page Cache load flow
+**Page Cache load flow**
 
 Let's make a simple code to read data aligned by page size using `FileChannel`:
 ```java
@@ -329,6 +327,7 @@ If you would like to repeat results on your machine (benchmark / plot):
   generate by (1)
 
 ### Read ahead pages
+
 Sequential reading is a common pattern in many application workflows, and modern operating systems, including Linux, 
 incorporate a read-ahead mechanism to enhance latency in such scenarios. The kernel can detect when data is being read 
 sequentially and proactively prefetch portions of the data into the page cache, anticipating future requests. 
@@ -390,7 +389,7 @@ If you would like to repeat results on your machine (benchmark):
 - run unit tests in `./src/test/pagecache`. tests will build you  output files in
   `./src/main/resources` such as: `readAheadSeq.txt`, `readAheadRandom.txt`.
 
-### Reading redundancy
+### Reading redundancy and mmap
 
 In scenarios where multiple application processes need access to the same data, traditional reading mechanisms involve 
 copying data from the page cache to the virtual memory of each reading process. However, this raises the question, 
@@ -452,7 +451,7 @@ between different parts of the system.
 
 ----
 
-### O_DIRECT
+### Disable cache with O_DIRECT
 
 In some use cases we do not need to have page cache at all. We want to have full control of data which we read or write.
 The directive `O_DIRECT` applied to `syscall` `open`.
@@ -488,7 +487,10 @@ Outcome:
 - `O_DIRECT` can disable page cache for your file.
 - `O_DIRECT` either have limits - you can read/write only aligned blocks, `readahead` won't work
 
+## Java NIO disk API internals
+
 ### Direct buffers
+
 As been said before, when `FileChannel` reads or writes files, it uses `syscalls`.
 When file channel reads data it calls native call, which reads data by **some address** to virtual memory of our process.
 
@@ -583,7 +585,7 @@ Buffer cache have limited pool size:
 
 Keep in mind every buffer with bigger size will be allocated in this pool!
 
-### Zero-copy file transfer (`transferTo`)
+### Zero-copy file transfer
 
 What if we need to copy one file (or part of file) to another file?
 
@@ -622,3 +624,14 @@ If you define load type strategy, you can help OS using `fadvice`.
 - Watch for IO limits - `mmap` limit, open files limit, etc
 
 ## References
+
+1. JVM benchmark graph library - https://www.jfree.org/jfreechart/
+2. File IO async limitations - https://www.remlab.net/op/nonblock.shtml
+3. Asynchronous file channel - https://docs.oracle.com/javase/7/docs/api/java/nio/channels/AsynchronousFileChannel.html
+4. Numbers every programmer should know - https://gist.github.com/jboner/2841832
+5. `Fadvice` linux documentation - https://man7.org/linux/man-pages/man2/posix_fadvise.2.html
+6. one-nio - https://github.com/odnoklassniki/one-nio
+7. `mmap` linux documentation - https://man7.org/linux/man-pages/man2/mmap.2.html
+8. `O_DIRECT` for JDK 17 - https://github.com/openjdk/jdk/commit/ec1c3bce45261576d64685a9f9f8eff163ea9452
+9. `O_DIRECT` over JNA - https://github.com/smacke/jaydio
+10. File channel implementation on JDK 8 - https://github.com/frohoff/jdk8u-jdk/blob/master/src/share/classes/sun/nio/ch/IOUtil.java#L37
