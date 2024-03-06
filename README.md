@@ -133,7 +133,7 @@ writes a long datatype value with some shift. When request comes to the disk:
 - _New Page Creation_: Instead of directly overwriting the current page, the controller creates a new page within the same block to accommodate the updated data.
 - _Write Operation_: The updated data in the internal buffer is written to the new page within the **block**.
 
-<img src="./plots/NAND_flash_write.png">
+<img width="50%" height="50%" src="./plots/NAND_flash_write.png">
 
 _Summary_:
 - **Write Operation**: Each write operation results in the creation of a new page. 
