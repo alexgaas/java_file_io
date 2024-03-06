@@ -377,11 +377,11 @@ Now let's see by benchmark how sequential / random read ahead for page cache imp
 
 Benchmark:
 
-| *Read Ahead (ms)* | 4MB | 64MB | 128MB | 256MB |
-|-------------------|-----|------|-------|-------|
-| Sequential        | 81  | 550  | 1065  | 2158  |
-| Random            | 108 | 547  | 1107  | 2244  |
-| %                 | 25% | 0%   | 4%    | 4%    |
+| *Read Ahead (ms)* | 4MB | 
+|-------------------|-----|
+| Sequential        | 81  |
+| Random            | 108 |
+| %                 | 25% |
 
 _Note_:
 If you would like to repeat results on your machine (benchmark / plot):
