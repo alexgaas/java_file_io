@@ -179,6 +179,7 @@ to increased wear and tear. Therefore, maximizing write efficiency is essential 
 of the SSD.
 
 ## Kernel
+
 Any JVM based application starts as a process in User Space of operating system. When application have to perform any
 IO operation it makes `syscall` what means makes kernel call to make IO operations over device driver which kernel have.
 
@@ -219,6 +220,7 @@ This approach helps ensure that IO operations do not disrupt the execution of cr
 in the application's main thread.
 
 ### Page cache
+
 Compared to processor cache or main memory, disk access is significantly slower (https://gist.github.com/jboner/2841832). 
 This is primarily due to the mechanical nature of traditional hard disk drives (HDDs) and the slower access times of NAND 
 flash memory used in solid-state drives (SSDs) compared to volatile memory technologies like RAM. 
@@ -326,7 +328,7 @@ If you would like to repeat results on your machine (benchmark / plot):
 - run `./src/main/org/example/PageClass.class/main`. That should show you plot based on your data,
   generate by (1)
 
-### Page Cache read ahead
+### Read ahead pages
 Sequential reading is a common pattern in many application workflows, and modern operating systems, including Linux, 
 incorporate a read-ahead mechanism to enhance latency in such scenarios. The kernel can detect when data is being read 
 sequentially and proactively prefetch portions of the data into the page cache, anticipating future requests. 
@@ -384,26 +386,28 @@ Benchmark:
 | %                 | 25% |
 
 _Note_:
-If you would like to repeat results on your machine (benchmark / plot):
-- run unit tests in `./src/test/pagecache`. tests will build you *percentile* output files in
-  `./src/main/resources` such as: `alignedLatencyPercentile.txt`, `notAlignedLatencyPercentile.txt`.
-- run `./src/main/org/example/PageClass.class/main`. That should show you plot based on your data,
-  generate by (1)
-
-----
+If you would like to repeat results on your machine (benchmark):
+- run unit tests in `./src/test/pagecache`. tests will build you  output files in
+  `./src/main/resources` such as: `readAheadSeq.txt`, `readAheadRandom.txt`.
 
 ### Reading redundancy
 
-Lets imaging case when one have to be available for a few different application processes.
-When we read that file, we copy data from page cache to virtual memory of reading process. If few applications perform
-reading operation, each of them accordingly have its own copy of data in its own virtual memory. That introduces question - 
-if there is opportunity read data not copying them to virtual memory of process? 
+In scenarios where multiple application processes need access to the same data, traditional reading mechanisms involve 
+copying data from the page cache to the virtual memory of each reading process. However, this raises the question, 
+there are opportunities to read data without the need to copy it to the virtual memory of each process?
 
 <img width="320" src="./plots/Reading_redundancy.png">
 
-Yes, that is **memory mapped file** implemented over _syscall_ `mmap`. 
-`mmap` can to tie up region in memory with file and work with that region using `ByteBuffer` without copying
-data to virtual memory of process.
+Yes, that is a memory-mapped files are implemented using the `mmap` syscall, which allows a region of memory to be tied 
+directly to a file. This means that the contents of the file can be accessed and manipulated using memory operations 
+without the need to copy the data into the virtual memory of each process.
+In JVM, this functionality can be leveraged using the `ByteBuffer` class, which provides a direct interface to the 
+memory-mapped region. This enables efficient reading and writing of data from the file, with changes being reflected 
+directly in the underlying file without the need for explicit copying.
+By using memory-mapped files and `ByteBuffer`, developers can achieve high-performance IO operations with minimal overhead, 
+making it a powerful tool for scenarios where multiple processes need to access the same data efficiently.
+
+----
 
 <img width="320" src="./plots/mmap.png">
 
