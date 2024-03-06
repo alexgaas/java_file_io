@@ -187,7 +187,7 @@ system kernel to facilitate the IO operations via the appropriate device driver 
 This interaction between the application in user space and the kernel for IO operations ensures efficient 
 data handling and resource management.
 
-<img src="./plots/OS_syscall.png">
+<img width="50%" height="50%" src="./plots/OS_syscall.png">
 
 _Note_: As of JDK versions up to 8, the JVM does not offer a non-blocking call mechanism for performing IO operations, 
 primarily due to UNIX not supporting non-blocking I/O for files. To maintain platform consistency across 
@@ -239,7 +239,7 @@ From the user's perspective when requesting data from disk:
 
 This caching mechanism helps improve overall system performance by reducing the need for frequent disk accesses, as data that has been recently accessed is stored in memory for faster retrieval.
 
-<img src="./plots/OS_Page_Cache.png">
+<img  width="50%" height="50%" src="./plots/OS_Page_Cache.png">
 
 The kernel has full control over the page cache, including the decision to load or evict pages. 
 This means that any page stored in the cache can be evicted by the kernel based on its internal management policies and resource availability. 
@@ -434,7 +434,7 @@ try(FileChannel ch = FileChannel.open(Paths.get(baseTestPath + fileName), READ, 
 
 There is how `mmap` going to work over multiple processes:
 
-<img width="320" src="./plots/mmap_mulitple_processes.png">
+<img src="./plots/mmap_mulitple_processes.png">
 
 `mmap` syscall have different work modes (they called flag arguments), you can find on:
 https://man7.org/linux/man-pages/man2/mmap.2.html
