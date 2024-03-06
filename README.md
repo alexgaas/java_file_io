@@ -396,7 +396,7 @@ In scenarios where multiple application processes need access to the same data, 
 copying data from the page cache to the virtual memory of each reading process. However, this raises the question, 
 there are opportunities to read data without the need to copy it to the virtual memory of each process?
 
-<img width="320" src="./plots/Reading_redundancy.png">
+<img src="./plots/Reading_redundancy.png">
 
 Yes, that is a memory-mapped files are implemented using the `mmap` syscall, which allows a region of memory to be tied 
 directly to a file. This means that the contents of the file can be accessed and manipulated using memory operations 
@@ -407,18 +407,20 @@ directly in the underlying file without the need for explicit copying.
 By using memory-mapped files and `ByteBuffer`, developers can achieve high-performance IO operations with minimal overhead, 
 making it a powerful tool for scenarios where multiple processes need to access the same data efficiently.
 
-----
+<img src="./plots/mmap.png">
 
-<img width="320" src="./plots/mmap.png">
+While `mmap` provides powerful capabilities for working directly with memory regions through byte buffers, 
+it's essential to be aware of its limitations and potential drawbacks:
+- No IO Exception Handling: When using `mmap`, it becomes more challenging to handle IO exceptions, as you're working 
+directly with memory regions rather than through traditional IO operations. This can make it difficult to track down 
+issues, such as when a file has been deleted while still being accessed through memory mapping.
+- File Size Limitations: `mmap` has inherent limitations on the size of files that can be mapped. 
+It may not be possible to map files larger than 2GB (Linux kernel), limiting its usefulness for handling large datasets.
+- Mapped Files Limit per Process: There is also a limit on the number of mapped files per process, which is configured 
+using the `max_map_count` parameter in the `etc/sysctl.conf` configuration file. Exceeding this limit can restrict the 
+scalability of applications that heavily utilize memory-mapped files.
 
-`mmap` might be extremely powerful tool in perspective of to work with memory region directly over byte buffer, but also
-have some cons you have to know about:
-- no IO exception - it is hard to track down file have been deleted since you work with memory region at this moment
-- `mmap` have limits - you can't map more than 2GB file
-- there is limit either to have number of mapped files per process. It is configured as `max_map_count` in
-`etc/sysctl.conf`
-
-Let's look on `mmap` basic example:
+Let's look on the `mmap` basic example:
 ```java
 try(FileChannel ch = FileChannel.open(Paths.get(baseTestPath + fileName), READ, WRITE)){
     MappedByteBuffer mmap = ch.map(FileChannel.MapMode.READ_WRITE, 0, ch.size());
@@ -431,41 +433,24 @@ try(FileChannel ch = FileChannel.open(Paths.get(baseTestPath + fileName), READ, 
 }
 ```
 
-there is how `mmap` going to work over multiple processes:
+There is how `mmap` going to work over multiple processes:
 
 <img width="320" src="./plots/mmap_mulitple_processes.png">
 
-`mmap` syscall have different work modes (they called flag arguments):
+`mmap` syscall have different work modes (they called flag arguments), you can find on:
 https://man7.org/linux/man-pages/man2/mmap.2.html
-
-```text
-MAP_SHARED
-        Share this mapping.  Updates to the mapping are visible to
-        other processes mapping the same region, and (in the case
-        of file-backed mappings) are carried through to the
-        underlying file.  (To precisely control when updates are
-        carried through to the underlying file requires the use of
-        msync(2).)
-
- MAP_SHARED_VALIDATE (since Linux 4.15)
-        This flag provides the same behavior as MAP_SHARED except
-        that MAP_SHARED mappings ignore unknown flags in flags.
-        By contrast, when creating a mapping using
-        MAP_SHARED_VALIDATE, the kernel verifies all passed flags
-        are known and fails the mapping with the error EOPNOTSUPP
-        for unknown flags.  This mapping type is also required to
-        be able to use some mapping flags (e.g., MAP_SYNC).
-
- MAP_PRIVATE
-        Create a private copy-on-write mapping.  Updates to the
-        mapping are not visible to other processes mapping the
-        same file, and are not carried through to the underlying
-        file.  It is unspecified whether changes made to the file
-        after the mmap() call are visible in the mapped region.
-```
 
 For example `MAP_SHARED` allows to see all modifications of one process to all others and as outcome
 we can build outer-process communication using that feature.
+
+For example, the `MAP_SHARED` flag in `mmap` allows multiple processes to share the same memory-mapped region. 
+This means that any modifications made by one process to the mapped memory are immediately visible to all other processes 
+that have access to the same mapping. This feature enables efficient inter-process communication by allowing processes 
+to share data without the need for explicit copying or synchronization mechanisms. Changes made to the memory-mapped 
+region by one process can be immediately observed by other processes, facilitating seamless communication and coordination 
+between different parts of the system.
+
+----
 
 ### O_DIRECT
 
