@@ -16,7 +16,6 @@ import java.util.*;
 import static java.nio.file.StandardOpenOption.*;
 
 public class MmapBasicExampleTest {
-    private static final String baseMainPath = "./src/main/resources/";
     private static final String baseTestPath = "./src/test/resources/";
     private static final String fileName = String.valueOf(System.currentTimeMillis());
     private static ByteBuffer buf;

@@ -65,9 +65,9 @@
         </dependency>
 
         <dependency>
-            <groupId>net.smacke</groupId>
-            <artifactId>jaydio</artifactId>
-            <version>0.1</version>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+            <version>5.14.0</version>
         </dependency>
 
     </dependencies>

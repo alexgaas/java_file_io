@@ -15,7 +15,7 @@ Contents:
    1. [Page cache](#page-cache)
    2. [Read ahead pages](#read-ahead-pages)
    3. [Reading redundancy and mmap](#reading-redundancy-and-mmap)
-   4. [Disable cache with O_DIRECT](#disable-cache-with-o_direct)
+   4. [Disable cache with O_DIRECT](#disable-cache-with-odirect)
 3. [Java NIO disk API internals](#java-nio-disk-api-internals)
    1. [Direct buffers](#direct-buffers)
    2. [Zero-copy file transfer](#zero-copy-file-transfer)
@@ -481,31 +481,36 @@ import java.nio.file.StandardOpenOption;
 FileChannel fc = FileChannel.open(f.toPath(), StandardOpenOption.WRITE, ExtendedOpenOption.DIRECT);
 ```
 
-----
+For JDK versions prior to 17, the `jaydio` library, available at https://github.com/smacke/jaydio/tree/master, offers 
+functionality for direct IO operations. This library utilizes the Java Native Access (JNA) interface 
+(https://github.com/java-native-access/jna/tree/master) to communicate with system calls and configure O_DIRECT mode, 
+allowing developers to bypass the page cache and perform IO operations with more control.
 
-For JDK less than 17 there is library https://github.com/smacke/jaydio/tree/master. For JDK 8 and 11, 
-there is old but good library built by Stephen Macke - https://github.com/smacke/jaydio.
-Basic example how to use `jaydio` can be found in `src/test/odirect` folder.
-
-Outcome:
-- beneficial use `mmap` to avoid copying data into virtual memory
-- `mmap` have limits you have to keep in mind - lazy loading to page cache, limit of files per process, no IOException
-- `O_DIRECT` can disable page cache for your file.
-- `O_DIRECT` either have limits - you can read/write only aligned blocks, `readahead` won't work
+Summary:
+- Utilizing `mmap` can be beneficial for avoiding data copying into virtual memory, allowing efficient access to shared 
+memory regions among processes.
+- However, `mmap` has limitations to consider, including lazy loading to the page cache, restrictions on the number of files 
+per process, and the absence of `IOException` handling.
+- `O_DIRECT` can disable the page cache for a file, providing more control over IO operations. Nevertheless, it also has 
+limitations such as the requirement to read/write aligned blocks and the inoperability of `readahead` mechanisms.
 
 ## Java NIO disk API internals
 
 ### Direct buffers
 
-As been said before, when `FileChannel` reads or writes files, it uses `syscalls`.
-When file channel reads data it calls native call, which reads data by **some address** to virtual memory of our process.
+The mechanism by which `FileChannel` reads or writes files using `syscalls` involves several layers of abstraction and native code interactions.
+When `FileChannel` reads data from a file, it calls native code to perform the actual read operation. This native code
+typically interacts directly with the operating system's file system implementation to read data from the file into a buffer.
+In this process, the data read from the file is indeed loaded into a buffer residing in the virtual memory of the Java process.
 
 Source code of JDK with details:
 https://github.com/frohoff/jdk8u-jdk/blob/master/src/share/classes/sun/nio/ch/IOUtil.java#L37
 
-Since JVM is working with head buffer, how could it get that address?
+Since JVM is working with only heap buffers by default, how would virtual machine get that physical address?
 
-<img width="320" src="./plots/Direct_Buffer.png">
+<img src="./plots/Direct_Buffer.png">
+
+----
 
 Obvious solution JDK developers is to create direct buffer, which allocated out of heap. 
 Since you create direct buffer with reference on it, you can read data into it and then copy
