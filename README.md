@@ -510,12 +510,12 @@ Since JVM is working with only heap buffers by default, how would virtual machin
 
 <img src="./plots/Direct_Buffer.png">
 
-----
-
-Obvious solution JDK developers is to create direct buffer, which allocated out of heap. 
-Since you create direct buffer with reference on it, you can read data into it and then copy
-that data from direct buffer into heap buffer.
-Looks like good solution, but as you may notice, we got additional copying of data as outcome of that operation.
+the JDK developers have implemented a solution by introducing direct buffers, which are allocated outside the heap. 
+With direct buffers, you can read data into them directly, and subsequently copy that data from the direct buffer into 
+a heap buffer as needed.
+While this approach facilitates efficient handling of large data sets and interaction with native code, it's important 
+to note that it entails an additional step of copying the data, which could impact performance, especially for frequent 
+or extensive data transfers.
 
 _Note_: since to allocate / deallocate direct buffer(s) is expensive operation, file channel implementation have
 special buffer cache to re-use already allocated direct buffers.
@@ -544,10 +544,13 @@ static int read(FileDescriptor fd, ByteBuffer dst, long position,
     }
 }
 ```
-As you may see method tries to identify if destination buffer is already direct buffer and if so
-it does not create and temporary buffer and not copying over data to heap buffer before to return it.
+As you may see, method `read` tries to identify if destination buffer is already direct buffer and if it is,
+the method is designed to detect if the destination buffer is already a direct buffer. If it is, the method skips the 
+creation of a temporary buffer and avoids copying the data to a heap buffer before returning it.
 
-How that additional copying may impact your throughput:
+Let's see on the benchmark to identify how that additional copying may impact your throughput:
+
+----
 
 Benchmark:
 
