@@ -550,17 +550,15 @@ creation of a temporary buffer and avoids copying the data to a heap buffer befo
 
 Let's see on the benchmark to identify how that additional copying may impact your throughput:
 
-----
-
 Benchmark:
 
-|        | 1MB    | 8Mb  | 16MB   | 64MB | 512MB | 1GB  |
-|--------|--------|------|--------|------|-------|------|
-| heap   | 2708   | 3000 | 3125   | 3125 | 3125  | 4042 |
-| direct | 3125   | 3417 | 3541   | 3542 | 3542  | 4250 |
-| %      | 14.36% | 9.5% | 11.75% | 12%  | 12%   | 5%   |
+| micro  | 1MB   | 16Mb | 256MB  | 1GB    | 
+|--------|-------|------|--------|--------|
+| heap   | 670   | 1909 | 36729  | 277649 | 
+| direct | 593   | 1471 | 28168  | 243792 | 
+| %      | 11.5% | 23%  | 23.7%  | 13%    |
 
-**Plot**:
+----
 
 Ok we got direct buffer can provide us much better throughput because it avoids additional copying during IO operations:
 

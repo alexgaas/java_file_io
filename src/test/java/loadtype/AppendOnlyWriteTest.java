@@ -17,6 +17,7 @@ import com.google.common.base.Stopwatch;
 
 import static java.nio.file.StandardOpenOption.*;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class AppendOnlyWriteTest {
     private static final String baseMainPath = "./src/main/resources/";
     private static final String baseTestPath = "./src/test/resources/";

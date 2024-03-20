@@ -42,7 +42,6 @@ public class MmapBasicExampleTest {
 
     private long mmapBasicTest(){
         Stopwatch watch = Stopwatch.createStarted();
-        ByteBuffer buf = ByteBuffer.allocate(4096);
         try(FileChannel ch = FileChannel.open(Paths.get(baseTestPath + fileName), READ, WRITE)){
             MappedByteBuffer mmap = ch.map(FileChannel.MapMode.READ_WRITE, 0, ch.size());
             // load data in memory

@@ -1,4 +1,4 @@
-package loadtype;
+package directbuffer;
 
 import com.github.kilianB.pcg.fast.PcgRSUFast;
 import com.google.common.base.Stopwatch;
@@ -6,7 +6,6 @@ import org.junit.jupiter.api.*;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
@@ -15,25 +14,28 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
-import static java.nio.file.StandardOpenOption.APPEND;
-import static java.nio.file.StandardOpenOption.CREATE_NEW;
+import static java.nio.file.StandardOpenOption.*;
+import static java.nio.file.StandardOpenOption.READ;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-public class RandomWriteTest {
+public class HeapBufferTest {
     private static final String baseMainPath = "./src/main/resources/";
     private static final String baseTestPath = "./src/test/resources/";
     private static final String fileName = String.valueOf(System.currentTimeMillis());
-    private static StringBuilder charBuf;
+
+    private static ByteBuffer buf;
 
     private static final StringBuilder output = new StringBuilder();
 
     @BeforeAll
     public static void setupRandomData(){
-        charBuf = new StringBuilder(1024 * 1024);
-        while(charBuf.length() < 1024 * 1024) {
-            charBuf.append(PcgRSUFast.nextChar());
+        buf = ByteBuffer.allocate(1024 * 1024);
+        while(buf.hasRemaining()){
+            buf.putChar(PcgRSUFast.nextChar());
         }
+        buf.flip();
     }
 
     @AfterEach
@@ -43,39 +45,43 @@ public class RandomWriteTest {
 
     @Test
     @Order(1)
-    public void test_1GB(){
-        long result = testRandomWrite(1);
-        System.out.println("Random write 1GB: " + result + " ms");
+    public void test_1MB(){
+        writeToTestSeqReading(1);
+        long result = testHeapBufferReading(1);
+        System.out.println("Heap buffer reading 1MB: " + result);
         output.append(result).append(" ");
     }
 
     @Test
     @Order(2)
-    public void test_2GB(){
-        long result = testRandomWrite(2);
-        System.out.println("Random write 2GB: " + result + " ms");
+    public void test_16MB(){
+        writeToTestSeqReading(16);
+        long result = testHeapBufferReading(16);
+        System.out.println("Heap buffer reading 16MB: " + result);
         output.append(result).append(" ");
     }
 
     @Test
     @Order(3)
-    public void test_4GB(){
-        long result = testRandomWrite(4);
-        System.out.println("Random write 4GB: " + result + " ms");
+    public void test_256MB(){
+        writeToTestSeqReading(256);
+        long result = testHeapBufferReading(256);
+        System.out.println("Heap buffer reading 256MB: " + result);
         output.append(result).append(" ");
     }
 
     @Test
     @Order(4)
     public void test_8GB(){
-        long result = testRandomWrite(8);
-        System.out.println("Random write 8GB: " + result + " ms");
+        writeToTestSeqReading(1024);
+        long result = testHeapBufferReading(1024);
+        System.out.println("Heap buffer reading 1GB: " + result);
         output.append(result);
     }
 
     @AfterAll
     public static void writeOutput() throws IOException {
-        String outputFile = "randomWrite.txt";
+        String outputFile = "heapBufferReading.txt";
         Path path = Paths.get(baseMainPath + outputFile);
         Files.deleteIfExists(path);
         try(FileChannel ch = FileChannel.open(path, CREATE_NEW, APPEND)){
@@ -91,19 +97,41 @@ public class RandomWriteTest {
         }
     }
 
-    private long testRandomWrite(int gbs) {
-        Stopwatch watch = Stopwatch.createStarted();
-        try(RandomAccessFile file = new RandomAccessFile(baseTestPath + fileName, "rw")){
-            file.seek(0);
-            int mbCount = 1024 * gbs;
+    private void writeToTestSeqReading(int mbs) {
+        try(FileChannel ch = FileChannel.open(Paths.get(baseTestPath + fileName), CREATE_NEW, WRITE)){
             int counter = 0;
-            while(counter < mbCount){
-                file.writeBytes(charBuf.toString());
+            while(counter < mbs){
+                while(buf.hasRemaining()){
+                    int bytes = ch.write(buf);
+                    if (bytes <= 0){
+                        break;
+                    }
+                }
+                buf.flip();
                 counter++;
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        return watch.elapsed().toMillis();
+    }
+
+    private long testHeapBufferReading(int mbs) {
+        Stopwatch watch = Stopwatch.createStarted();
+        try(FileChannel ch = FileChannel.open(Paths.get(baseTestPath + fileName), READ)){
+            int counter = 0;
+            while(counter < mbs){
+                while(buf.hasRemaining()){
+                    int bytes = ch.read(buf);
+                    if (bytes <= 0){
+                        break;
+                    }
+                }
+                buf.flip();
+                counter++;
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return watch.elapsed(TimeUnit.MICROSECONDS);
     }
 }

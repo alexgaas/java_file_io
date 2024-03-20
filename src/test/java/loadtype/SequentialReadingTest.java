@@ -17,6 +17,7 @@ import java.util.Objects;
 
 import static java.nio.file.StandardOpenOption.*;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class SequentialReadingTest {
     private static final String baseMainPath = "./src/main/resources/";
     private static final String baseTestPath = "./src/test/resources/";
