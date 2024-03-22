@@ -613,11 +613,13 @@ When needing to copy a file or a specific portion of it to another file, we ofte
 To minimize the amount of data copying, we can utilize the `syscall` once more, known as `sendfile`, which allows direct data 
 transfer from one location to another by the kernel. This method has been integrated into NIO and is referred to as `transferTo`.
 
-<img width="320" src="./plots/TransferTo_Method.png">
+<img src="./plots/TransferTo_Method.png">
 
 Let's look how better would be `transferTo` according to naive approach.
 
 Benchmark:
+
+----
 
 |            | 1MB    | 8Mb  | 16MB   | 64MB | 512MB | 1GB  |
 |------------|--------|------|--------|------|-------|------|
