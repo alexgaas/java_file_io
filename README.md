@@ -558,9 +558,8 @@ Benchmark:
 | direct | 593   | 1471 | 28168  | 243792 | 
 | %      | 11.5% | 23%  | 23.7%  | 13%    |
 
-----
-
-Ok we got direct buffer can provide us much better throughput because it avoids additional copying during IO operations:
+As seen from benchmark, direct buffer objectively can provide better throughput because it avoids additional copying during IO operations.
+To use direct buffer use specific allocation call:
 
 ```java
 import java.nio.ByteBuffer;
@@ -568,13 +567,18 @@ import java.nio.ByteBuffer;
 ByteBuffer buf = ByteBuffer.allocateDirect(...);
 ```
 
-But obviously there is price we have to pay for it:
+Obviously there is price JVM user have to pay for using direct buffer instead of heap buffer:
 
-- Since direct buffer is off-heap buffer, you can't release buffer memory by `buf.clear()`
-- Memory will be release only after GC iteration, as soon as GC will remove `buf` object from generation
+- Since direct buffer is off-heap buffer, there is no way to release buffer memory by `buf.clear()`
+- Memory will be release only after GC iteration, as soon as GC will remove `buf` object from appropriate GC generation
 
 **BufferCache**
-Keep in mind `BufferCache` is **thread-local** object
+
+As been noted before since to allocate / deallocate direct buffer(s) is expensive operation, file channel implementation have
+special buffer cache to re-use already allocated direct buffers.
+
+`BufferCache` is defined as **thread-local** object internally in the `FileChannel`. That means if you operate byte buffers 
+over file channel in the separate threads, buffer cache is going have high memory consumption.
 ```java
 // Per-thread cache of temporary direct buffers
 private static ThreadLocal<BufferCache> bufferCache =
@@ -586,30 +590,32 @@ private static ThreadLocal<BufferCache> bufferCache =
     }
 };
 ```
-what means if you operate buffers in separate threads, cache is going have high memory consumption!
 
-Buffer cache have limited pool size:
+Buffer cache also have limited pool size:
 ```java
 // The number of temp buffers in our pool
     private static final int TEMP_BUF_POOL_SIZE = IOUtil.IOV_MAX;
 ```
 (defined by `jdk.nio.maxCachedBufferSize`, you can change that value - by default it 1024 for JDK 8).
 
-Keep in mind every buffer with bigger size will be allocated in this pool!
+Please Keep in mind, every buffer with bigger size will be allocated in this pool so good practice would be to re-use
+buffers with exactly same size.
 
 ### Zero-copy file transfer
 
-What if we need to copy one file (or part of file) to another file?
+Many modern systems, like Apache Kafka, are tasked with efficiently copying data—whether it's a file or a portion thereof—to another destination.
+https://kafka.apache.org/08/documentation.html
 
-We can just use naive copy approach:
+When needing to copy a file or a specific portion of it to another file, we often start with a simple, naive copy approach:
 
-<img width="320" src="./plots/Naive_copy.png">
+<img src="./plots/Naive_copy.png">
 
-To reduce numbers of copying data we can use `syscall` again (it called `sendfile`)
-to directly copy data from one place by another by Kernel.
-This method have been implemented in NIO and called `transferTo`
+To minimize the amount of data copying, we can utilize the `syscall` once more, known as `sendfile`, which allows direct data 
+transfer from one location to another by the kernel. This method has been integrated into NIO and is referred to as `transferTo`.
 
 <img width="320" src="./plots/TransferTo_Method.png">
+
+Let's look how better would be `transferTo` according to naive approach.
 
 Benchmark:
 
@@ -647,3 +653,4 @@ If you define load type strategy, you can help OS using `fadvice`.
 8. `O_DIRECT` for JDK 17 - https://github.com/openjdk/jdk/commit/ec1c3bce45261576d64685a9f9f8eff163ea9452
 9. `O_DIRECT` over JNA - https://github.com/smacke/jaydio
 10. File channel implementation on JDK 8 - https://github.com/frohoff/jdk8u-jdk/blob/master/src/share/classes/sun/nio/ch/IOUtil.java#L37
+11. Kafka Efficiency with `sendfile` - https://kafka.apache.org/08/documentation.html
