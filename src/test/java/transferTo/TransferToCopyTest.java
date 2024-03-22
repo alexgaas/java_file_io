@@ -42,8 +42,6 @@ public class TransferToCopyTest {
         Arrays.stream(Objects.requireNonNull(new File(baseTestPath).listFiles())).forEach(File::delete);
     }
 
-    // 64 256 512 1
-
     @Test
     @Order(1)
     public void test_64MB(){

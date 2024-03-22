@@ -71,7 +71,7 @@ generate by (1)
 ### Disk types
 
 _Legend_:
-- &check; means disk effectevly makes these types of IO operations
+- &check; means disk effectively makes these types of IO operations
 - &cross; disk also can do that operations but much slower (means order, 10 times and more)
 then if you see &check;
 
@@ -615,33 +615,39 @@ transfer from one location to another by the kernel. This method has been integr
 
 <img src="./plots/TransferTo_Method.png">
 
-Let's look how better would be `transferTo` according to naive approach.
+Let's look how better would be use `transferTo` according to naive approach.
 
 Benchmark:
 
-----
-
-|            | 1MB    | 8Mb  | 16MB   | 64MB | 512MB | 1GB  |
-|------------|--------|------|--------|------|-------|------|
-| transferTo | 2708   | 3000 | 3125   | 3125 | 3125  | 4042 |
-| Naive      | 3125   | 3417 | 3541   | 3542 | 3542  | 4250 |
-| %          | 14.36% | 9.5% | 11.75% | 12%  | 12%   | 5%   |
+| (in ms)        | 64MB | 256Mb | 512MB | 1GB  |
+|----------------|------|-------|-------|------|
+| transferTo     | 28   | 103   | 185   | 773  |
+| Naive          | 71   | 252   | 842   | 1715 |
+| faster (times) | 2.53 | 2.44  | 4.55  | 2.29 |
 
 Plot:
 
-Outcome:
+<img src="./plots/Naive_vs_TransferTo.png">
 
+_Note_:
+If you would like to repeat results on your machine (benchmark / plot):
+- run unit tests in `./src/test/transferTo`. tests will build you output files in
+  `./src/main/resources` such as: `naiveCopy.txt` and `transferToCopy.txt`.
+- run `./src/main/org/transferTo/TransferTo.class/main`. That should show you plot based on your data,
+  generate by (1)
+
+Summary:
 - use direct buffer if low latency is important 
 - if you assume to use and interrupt threads with FileChannel, use `AsyncFileChannel`
 or `RWLock` for `FileChannel`
+- `transferTo` is most effective way to copy data between files
 
 ## Summary
-
 - Know your hardware and load type to choose effective strategy for disk IO operations
 - Operating system tries to improve your throughput using page cache and read ahead.
 If you define load type strategy, you can help OS using `fadvice`.
-- Use `FileChannel` - File(I/O)Stream and RandomAccessFile classes mostly legacy today
-- Watch for IO limits - `mmap` limit, open files limit, etc
+- Use `FileChannel` - File(I/O)Stream and `RandomAccessFile` classes mostly legacy today
+- Know and watch IO limits - `mmap` limit, open files limit, etc
 
 ## References
 

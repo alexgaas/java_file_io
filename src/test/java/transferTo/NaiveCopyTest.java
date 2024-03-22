@@ -119,16 +119,8 @@ public class NaiveCopyTest {
         try(FileChannel src = FileChannel.open(Paths.get(baseTestPath + fileName), READ);
             FileChannel dest = FileChannel.open(Paths.get(baseTestPath + fileName + "_copy"), CREATE_NEW, WRITE)){
                 ByteBuffer buf = ByteBuffer.allocate((int) src.size());
-                while(buf.hasRemaining()){
-                    int bytes = src.read(buf);
-                    if (bytes <= 0){
-                        break;
-                    }
-                    bytes = dest.write(buf);
-                    if (bytes <= 0){
-                        break;
-                    }
-                }
+                src.read(buf);
+                dest.write(buf);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
