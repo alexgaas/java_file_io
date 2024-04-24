@@ -178,9 +178,6 @@ of the SSD.
 
 ## Kernel optimizations
 
-Any JVM based application starts as a process in User Space of operating system. When application have to perform any
-IO operation it makes `syscall` what means makes kernel call to make IO operations over device driver which kernel have.
-
 Any JVM-based application initiates as a process within the user space of the operating system. 
 When such an application needs to perform any IO operation, it triggers a `syscall`, signaling the operating 
 system kernel to facilitate the IO operations via the appropriate device driver it possesses. 
